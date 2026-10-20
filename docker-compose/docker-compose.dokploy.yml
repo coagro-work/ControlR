@@ -1,0 +1,114 @@
+### Dokploy deployment (infra-controlr-nd2l7s, https://ativos.coagro.work) ###
+# Builds the server from this repository instead of pulling bitbound/controlr.
+# Note: this build does NOT include the agent installers (wwwroot/downloads),
+# which the upstream CI produces separately.
+#
+# Differences from docker-compose.yml:
+# - No container_name, host ports, fixed subnet or global volume name; Dokploy
+#   isolates everything under the compose project name.
+# - Traefik (dokploy-network) routes ativos.coagro.work to controlr:8080.
+# - Secrets come from the Dokploy environment (written to ./.env on deploy).
+
+x-postgres-user: &pgUser ${ControlR_POSTGRES_USER:?error}
+x-postgres-password: &pgPassword ${ControlR_POSTGRES_PASSWORD:?error}
+x-aspire-browser-token: &aspireToken ${ControlR_ASPIRE_BROWSER_TOKEN:?error}
+x-aspire-public-url: &aspirePublicUrl "http://localhost:18888"
+
+services:
+  controlr:
+    build:
+      context: ..
+      dockerfile: ControlR.Web.Server/Dockerfile
+      args:
+        CURRENT_VERSION: ${ControlR_VERSION:-0.0.0}
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - aspire
+    expose:
+      - "8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_HTTP_PORTS: 8080
+
+      ControlR_POSTGRES_PORT: 5432
+      ControlR_POSTGRES_HOST: "postgres"
+      ControlR_POSTGRES_USER: *pgUser
+      ControlR_POSTGRES_PASSWORD: *pgPassword
+      ControlR_POSTGRES_DB: "controlr"
+
+      ControlR_AppOptions__EnableDockerSecrets: false
+      ControlR_AspireDashboard__Token: *aspireToken
+      ControlR_AspireDashboard__PublicWebUrl: *aspirePublicUrl
+      ControlR_AppOptions__EnableCors: false
+
+      # Registration: only the bootstrap admin below; no public or first-user signup.
+      ControlR_AppOptions__EnablePublicRegistration: false
+      ControlR_AppOptions__DisableFirstUserSelfRegistration: true
+      ControlR_AppOptions__AllowAgentsToSelfBootstrap: false
+
+      ControlR_AppOptions__AgentInstallerKeyHistoryDays: 90
+      ControlR_AppOptions__AgentClockSkewTolerance: "00:01:00"
+      ControlR_AppOptions__AuthenticatorIssuerName: "ControlR"
+      ControlR_AppOptions__EnableInteractiveBearerLogin: false
+      ControlR_AppOptions__InteractiveBearerTokenExpirationMinutes: 60
+      ControlR_AppOptions__InteractiveRefreshTokenExpirationDays: 30
+      ControlR_AppOptions__PersistPasskeyLogin: false
+
+      # Reverse proxy: Cloudflare -> Traefik (dokploy-network 10.0.1.0/24) -> controlr.
+      ControlR_AppOptions__EnableCloudflareProxySupport: true
+      ControlR_AppOptions__EnableNetworkTrust: false
+      ControlR_AppOptions__KnownNetworks__0: "10.0.1.0/24"
+
+      ControlR_AppOptions__EnableDatabaseDetailedErrors: false
+      ControlR_OTLP_ENDPOINT_URL: "http://aspire:18889"
+      ControlR_Logging__LogLevel__Default: Information
+      ControlR_Logging__LogLevel__Microsoft.AspNetCore: Warning
+      ControlR_Logging__LogLevel__Microsoft.AspNetCore.HttpLogging: Information
+      ControlR_Logging__LogLevel__Microsoft.AspNetCore.HttpOverrides: Debug
+      ControlR_Logging__LogLevel__Microsoft.EntityFrameworkCore.Database: Warning
+      ControlR_AppOptions__UseHttpLogging: false
+      ControlR_AppOptions__EnableSignalrDetailedErrors: false
+      ControlR_AppOptions__EnableScalarUi: false
+      ControlR_ServerLifecycle__DecommissionServer: false
+      ControlR_KeyProtectionOptions__EncryptKeys: false
+      ControlR_AppOptions__UseInMemoryDatabase: false
+      ControlR_AppOptions__InMemoryDatabaseName: ""
+      ControlR_AppOptions__MaxFileTransferSize: 104857600
+
+      # No SMTP configured: email confirmation and sending are disabled.
+      ControlR_AppOptions__RequireUserEmailConfirmation: false
+      ControlR_AppOptions__RequireUserUniqueEmail: true
+      ControlR_AppOptions__DisableEmailSending: true
+
+      ControlR_AppOptions__DefaultThemeMode: "Dark"
+      ControlR_AppOptions__DisableDesktopPreview: false
+
+      # Admin user created on first startup (only when no users exist).
+      ControlR_Bootstrap__AdminEmail: ${ControlR_ADMIN_EMAIL:?error}
+      ControlR_Bootstrap__AdminPassword: ${ControlR_ADMIN_PASSWORD:?error}
+
+  postgres:
+    image: postgres:18
+    restart: unless-stopped
+    expose:
+      - "5432"
+    volumes:
+      - controlr-data:/var/lib/postgresql
+    environment:
+      POSTGRES_USER: *pgUser
+      POSTGRES_PASSWORD: *pgPassword
+      POSTGRES_DB: controlr
+
+  aspire:
+    image: mcr.microsoft.com/dotnet/aspire-dashboard:13.6.1
+    restart: unless-stopped
+    expose:
+      - "18888"
+      - "18889"
+    environment:
+      Dashboard__Frontend__BrowserToken: *aspireToken
+      Dashboard__Frontend__PublicUrl: *aspirePublicUrl
+
+volumes:
+  controlr-data:

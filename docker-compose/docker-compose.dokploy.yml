@@ -18,7 +18,7 @@ services:
   controlr:
     build:
       context: ..
-      dockerfile: ControlR.Web.Server/Dockerfile
+      dockerfile: docker-compose/Dockerfile.dokploy
       args:
         CURRENT_VERSION: ${ControlR_VERSION:-0.0.0}
     restart: unless-stopped

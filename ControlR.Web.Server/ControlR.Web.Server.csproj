@@ -48,6 +48,7 @@
 		<PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" />
 		<PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
 		<PackageReference Include="QRCoder" />
+		<PackageReference Include="System.Security.Cryptography.Pkcs" />
 		<PackageReference Update="Bitbound.Analyzers.MemberOrder">
 			<PrivateAssets>all</PrivateAssets>
 			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
